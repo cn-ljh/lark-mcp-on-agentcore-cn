@@ -311,8 +311,13 @@ export class OAuthStack extends cdk.Stack {
     // region-independent request-rate cap that applies even when the optional
     // CloudFront WAF is skipped (SKIP_WAF) or bypassed by hitting execute-api
     // directly — without it the OAuth/MCP endpoints would have no rate control.
+    // aws-cn does not support EDGE-optimized endpoints (CloudFormation fails with
+    // "Endpoint Configuration type EDGE is not supported in this region"), so
+    // cn-* regions use a REGIONAL endpoint. Other regions keep the CDK default.
+    const isChinaRegion = !cdk.Token.isUnresolved(this.region) && this.region.startsWith("cn-");
     const api = new apigateway.RestApi(this, "OAuthApi", {
       restApiName: names.apiName,
+      ...(isChinaRegion ? { endpointTypes: [apigateway.EndpointType.REGIONAL] } : {}),
       deployOptions: {
         throttlingRateLimit: parseInt(process.env.APIGW_RATE_LIMIT || "50", 10),
         throttlingBurstLimit: parseInt(process.env.APIGW_BURST_LIMIT || "100", 10),

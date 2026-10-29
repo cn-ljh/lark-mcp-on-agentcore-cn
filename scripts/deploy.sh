@@ -1673,7 +1673,9 @@ except Exception as e:
         c.update_agent_runtime_endpoint(agentRuntimeId='${RUNTIME_ID}', endpointName='ep', agentRuntimeVersion=version)
     else:
         print(f'  Warning: {e}', file=sys.stderr)
-for i in range(30):
+# aws-cn endpoint provisioning can take several minutes (observed > 150s in
+# cn-northwest-1), so wait up to 10 min instead of 150s.
+for i in range(120):
     r = c.get_agent_runtime_endpoint(agentRuntimeId='${RUNTIME_ID}', endpointName='ep')
     if r['status'] == 'READY': print('  Endpoint ready ✓'); sys.exit(0)
     if r['status'] == 'FAILED': print('  Endpoint creation failed', file=sys.stderr); sys.exit(1)
