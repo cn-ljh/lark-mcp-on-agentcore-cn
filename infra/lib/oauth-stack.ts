@@ -17,6 +17,7 @@ import * as sns from "aws-cdk-lib/aws-sns";
 import * as snsSubscriptions from "aws-cdk-lib/aws-sns-subscriptions";
 import { Construct } from "constructs";
 import * as path from "path";
+import { partitionOf, urlSuffixOf } from "./partition";
 import * as fs from "fs";
 import { resolveSlug } from "./slug-names";
 
@@ -101,6 +102,8 @@ export class OAuthStack extends cdk.Stack {
     // Per-app names. Empty slug = default sentinel = today's byte-identical
     // literals, so the default deployment synthesizes unchanged.
     const names = resolveSlug(props.slug ?? "");
+    // aws / aws-cn — keeps hard-coded ARNs valid in the China partition.
+    const partition = partitionOf(this);
 
     this.secretPrefix = names.secretUsersPrefix;
     this.appSecretId = names.feishuSecret;
@@ -120,7 +123,7 @@ export class OAuthStack extends cdk.Stack {
       fn.addToRolePolicy(new iam.PolicyStatement({
         effect: iam.Effect.DENY,
         actions: ["secretsmanager:*"],
-        resources: [`arn:aws:secretsmanager:${this.region}:${this.account}:secret:${this.secretPrefix}/*/*`],
+        resources: [`arn:${partition}:secretsmanager:${this.region}:${this.account}:secret:${this.secretPrefix}/*/*`],
       }));
     };
 
@@ -196,7 +199,7 @@ export class OAuthStack extends cdk.Stack {
     appSecret.grantRead(oauthFn);
     oauthFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ["ssm:GetParameter"],
-      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter${stateSecretParam}`],
+      resources: [`arn:${partition}:ssm:${this.region}:${this.account}:parameter${stateSecretParam}`],
     }));
     // Per-user token secrets only. Scoped to .../users/* — NOT the whole project
     // prefix — so a compromised OAuth Lambda cannot overwrite the feishu-app
@@ -220,7 +223,7 @@ export class OAuthStack extends cdk.Stack {
         "secretsmanager:DescribeSecret",
         "secretsmanager:UpdateSecret",
       ],
-      resources: [`arn:aws:secretsmanager:${this.region}:${this.account}:secret:${this.secretPrefix}/*`],
+      resources: [`arn:${partition}:secretsmanager:${this.region}:${this.account}:secret:${this.secretPrefix}/*`],
     }));
     denyNestedUserSecrets(oauthFn);
     // oauthFn creates/updates secrets on the CMK, so it needs Encrypt as well as
@@ -280,12 +283,13 @@ export class OAuthStack extends cdk.Stack {
         STATE_SECRET_PARAM: stateSecretParam,
         AUTHORIZE_BASE: "SET_AFTER_DEPLOY",
         DEPLOY_REGION: this.region,
+        URL_SUFFIX: urlSuffixOf(this),
       },
       bundling: { externalModules: ["@aws-sdk/*"], minify: true, target: "node20" },
     });
     middlewareFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ["secretsmanager:GetSecretValue"],
-      resources: [`arn:aws:secretsmanager:${this.region}:${this.account}:secret:${this.secretPrefix}/*`],
+      resources: [`arn:${partition}:secretsmanager:${this.region}:${this.account}:secret:${this.secretPrefix}/*`],
     }));
     denyNestedUserSecrets(middlewareFn);
     // MCP HOT PATH: middlewareFn GetSecretValue-reads the user token on every
@@ -296,11 +300,11 @@ export class OAuthStack extends cdk.Stack {
     userSecretKey.grant(middlewareFn, "kms:Decrypt", "kms:DescribeKey");
     middlewareFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ["ssm:GetParameter"],
-      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter${stateSecretParam}`],
+      resources: [`arn:${partition}:ssm:${this.region}:${this.account}:parameter${stateSecretParam}`],
     }));
     middlewareFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ["bedrock-agentcore:InvokeAgentRuntime"],
-      resources: [`arn:aws:bedrock-agentcore:${this.region}:${this.account}:runtime/*`],
+      resources: [`arn:${partition}:bedrock-agentcore:${this.region}:${this.account}:runtime/*`],
     }));
 
     // Single API Gateway: all routes (OAuth + MCP). Stage-level throttling is a
@@ -344,20 +348,29 @@ export class OAuthStack extends cdk.Stack {
     mcpResource.addMethod("GET", mcpIntegration);
     mcpResource.addMethod("DELETE", mcpIntegration);
 
-    // CloudFront (single domain for OAuth + MCP)
-    const distribution = new cloudfront.Distribution(this, "OAuthCF", {
-      defaultBehavior: {
-        origin: new origins.RestApiOrigin(api),
-        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.HTTPS_ONLY,
-        allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
-        cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
-        originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
-      },
-      priceClass: cloudfront.PriceClass.PRICE_CLASS_200,
-      webAclId: props.webAclArn,
-    });
+    // CloudFront (single domain for OAuth + MCP).
+    // AWS China (aws-cn): CloudFront has no usable default *.cloudfront.cn
+    // domain — it needs an ICP-filed alternate domain + IAM-uploaded cert, which
+    // this sample does not manage. So in cn-* regions CloudFront is never
+    // created; the API Gateway stage URL is exposed directly.
+    const isChina = !cdk.Token.isUnresolved(this.region) && this.region.startsWith("cn-");
+    if (isChina) {
+      this.oauthEndpoint = `https://${api.restApiId}.execute-api.${this.region}.${urlSuffixOf(this)}/${api.deploymentStage.stageName}`;
+    } else {
+      const distribution = new cloudfront.Distribution(this, "OAuthCF", {
+        defaultBehavior: {
+          origin: new origins.RestApiOrigin(api),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.HTTPS_ONLY,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+        },
+        priceClass: cloudfront.PriceClass.PRICE_CLASS_200,
+        webAclId: props.webAclArn,
+      });
 
-    this.oauthEndpoint = `https://${distribution.distributionDomainName}`;
+      this.oauthEndpoint = `https://${distribution.distributionDomainName}`;
+    }
 
     // CALLBACK_URL is set post-deploy by deploy.sh (avoids circular dependency with CloudFront)
 
@@ -661,17 +674,17 @@ export class OAuthStack extends cdk.Stack {
       new cloudwatch.AlarmStatusWidget({
         title: dt.alarms,
         alarms: [
-          cloudwatch.Alarm.fromAlarmArn(this, "RefTokenLost", `arn:aws:cloudwatch:${this.region}:${this.account}:alarm:${an.token_lost}`),
-          cloudwatch.Alarm.fromAlarmArn(this, "RefRefreshFailed", `arn:aws:cloudwatch:${this.region}:${this.account}:alarm:${an.refresh_failed}`),
-          cloudwatch.Alarm.fromAlarmArn(this, "RefUpstream5xx", `arn:aws:cloudwatch:${this.region}:${this.account}:alarm:${an.upstream_5xx}`),
-          cloudwatch.Alarm.fromAlarmArn(this, "RefLatency", `arn:aws:cloudwatch:${this.region}:${this.account}:alarm:${an.mcp_latency}`),
-          cloudwatch.Alarm.fromAlarmArn(this, "RefNotAuth", `arn:aws:cloudwatch:${this.region}:${this.account}:alarm:${an.feishu_not_auth}`),
-          cloudwatch.Alarm.fromAlarmArn(this, "RefConcurrency", `arn:aws:cloudwatch:${this.region}:${this.account}:alarm:${an.concurrency_pct}`),
-          cloudwatch.Alarm.fromAlarmArn(this, "RefThrottle", `arn:aws:cloudwatch:${this.region}:${this.account}:alarm:${an.throttles}`),
-          cloudwatch.Alarm.fromAlarmArn(this, "RefApiGw5xx", `arn:aws:cloudwatch:${this.region}:${this.account}:alarm:${an.apigw_5xx}`),
-          cloudwatch.Alarm.fromAlarmArn(this, "RefOAuthErr", `arn:aws:cloudwatch:${this.region}:${this.account}:alarm:${an.oauth_errors}`),
-          cloudwatch.Alarm.fromAlarmArn(this, "RefMwErr", `arn:aws:cloudwatch:${this.region}:${this.account}:alarm:${an.middleware_errors}`),
-          cloudwatch.Alarm.fromAlarmArn(this, "RefCmkStragglers", `arn:aws:cloudwatch:${this.region}:${this.account}:alarm:${an.cmk_stragglers}`),
+          cloudwatch.Alarm.fromAlarmArn(this, "RefTokenLost", `arn:${partition}:cloudwatch:${this.region}:${this.account}:alarm:${an.token_lost}`),
+          cloudwatch.Alarm.fromAlarmArn(this, "RefRefreshFailed", `arn:${partition}:cloudwatch:${this.region}:${this.account}:alarm:${an.refresh_failed}`),
+          cloudwatch.Alarm.fromAlarmArn(this, "RefUpstream5xx", `arn:${partition}:cloudwatch:${this.region}:${this.account}:alarm:${an.upstream_5xx}`),
+          cloudwatch.Alarm.fromAlarmArn(this, "RefLatency", `arn:${partition}:cloudwatch:${this.region}:${this.account}:alarm:${an.mcp_latency}`),
+          cloudwatch.Alarm.fromAlarmArn(this, "RefNotAuth", `arn:${partition}:cloudwatch:${this.region}:${this.account}:alarm:${an.feishu_not_auth}`),
+          cloudwatch.Alarm.fromAlarmArn(this, "RefConcurrency", `arn:${partition}:cloudwatch:${this.region}:${this.account}:alarm:${an.concurrency_pct}`),
+          cloudwatch.Alarm.fromAlarmArn(this, "RefThrottle", `arn:${partition}:cloudwatch:${this.region}:${this.account}:alarm:${an.throttles}`),
+          cloudwatch.Alarm.fromAlarmArn(this, "RefApiGw5xx", `arn:${partition}:cloudwatch:${this.region}:${this.account}:alarm:${an.apigw_5xx}`),
+          cloudwatch.Alarm.fromAlarmArn(this, "RefOAuthErr", `arn:${partition}:cloudwatch:${this.region}:${this.account}:alarm:${an.oauth_errors}`),
+          cloudwatch.Alarm.fromAlarmArn(this, "RefMwErr", `arn:${partition}:cloudwatch:${this.region}:${this.account}:alarm:${an.middleware_errors}`),
+          cloudwatch.Alarm.fromAlarmArn(this, "RefCmkStragglers", `arn:${partition}:cloudwatch:${this.region}:${this.account}:alarm:${an.cmk_stragglers}`),
         ],
         width: 24,
       }),
@@ -794,7 +807,8 @@ export class OAuthStack extends cdk.Stack {
     );
 
 
-    const dashboardUrl = `https://${this.region}.console.aws.amazon.com/cloudwatch/home?region=${this.region}#dashboards/dashboard/lark-mcp-on-agentcore`;
+    const consoleHost = partition === "aws-cn" ? "console.amazonaws.cn" : `${this.region}.console.aws.amazon.com`;
+    const dashboardUrl = `https://${consoleHost}/cloudwatch/home?region=${this.region}#dashboards/dashboard/lark-mcp-on-agentcore`;
     new cdk.CfnOutput(this, "DashboardUrl", { value: dashboardUrl, description: "CloudWatch observability dashboard" });
     new cdk.CfnOutput(this, "AlarmTopicArn", { value: alarmTopic.topicArn });
     new cdk.CfnOutput(this, "OAuthFunctionName", { value: oauthFn.functionName });

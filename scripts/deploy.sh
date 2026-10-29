@@ -568,6 +568,8 @@ if [ -z "$REGION_SELECTED" ]; then
     "eu-west-1        Ireland" \
     "eu-central-1     Frankfurt" \
     "me-central-1     UAE" \
+    "cn-north-1       Beijing (aws-cn)" \
+    "cn-northwest-1   Ningxia (aws-cn)" \
     "${L[manual_input]}"
   REGION=$(echo "$_REGION_PICK" | awk '{print $1}')
   if [ "$REGION" = "${L[manual_input]}" ]; then
@@ -576,6 +578,12 @@ if [ -z "$REGION_SELECTED" ]; then
 fi
 info "AWS Account: ${ACCOUNT_ID}"
 info "Region: ${REGION}"
+# AWS partition / DNS suffix derived from the region. China regions (cn-*) live
+# in the aws-cn partition: ARNs are arn:aws-cn:..., endpoints *.amazonaws.com.cn.
+case "$REGION" in
+  cn-*) AWS_PARTITION="aws-cn"; AWS_URL_SUFFIX="amazonaws.com.cn"; IS_CHINA=1 ;;
+  *)    AWS_PARTITION="aws";    AWS_URL_SUFFIX="amazonaws.com";    IS_CHINA=0 ;;
+esac
 
 # Brand / edition: feishu (China, *.feishu.cn) or lark (international, *.larksuite.com).
 # Selects BOTH the OAuth flow endpoints (token-refresh-shim) and lark-cli's API
@@ -817,7 +825,11 @@ print(json.dumps({'tokens': toks}, separators=(',', ':')))
 fi
 
 # WAF (default: off). Honor SKIP_WAF env override; on non-interactive default off.
-if [ -n "${SKIP_WAF+x}" ]; then
+# China (aws-cn) has no us-east-1 / CloudFront-scope WAF: always skip.
+if [ "$IS_CHINA" = "1" ]; then
+  [ "${SKIP_WAF:-1}" = "0" ] && warn "SKIP_WAF=0 ignored: CloudFront-scope WAF (us-east-1) is not available in aws-cn"
+  ENABLE_WAF=0
+elif [ -n "${SKIP_WAF+x}" ]; then
   # Explicit env override
   if [ "${SKIP_WAF}" = "0" ]; then ENABLE_WAF=1; else ENABLE_WAF=0; fi
 elif [ ! -t 0 ]; then
@@ -1185,7 +1197,7 @@ ensure_bootstrap() {
 ensure_bootstrap "$REGION"
 # Bootstrap us-east-1 only when WAF is being deployed (CloudFront-scope WAF
 # requires us-east-1).
-if [ "${SKIP_WAF:-0}" != "1" ] && [ "$REGION" != "us-east-1" ]; then
+if [ "${SKIP_WAF:-0}" != "1" ] && [ "$REGION" != "us-east-1" ] && [ "$IS_CHINA" != "1" ]; then
   ensure_bootstrap "us-east-1"
 fi
 
@@ -1242,8 +1254,12 @@ done
 
 # WAF lives in us-east-1 regardless of deploy region. It is SHARED across all
 # apps (WAF_STACK is never slug-suffixed).
+if [ "$IS_CHINA" = "1" ]; then
+  WAF_STATUS="NOT_FOUND"   # aws-cn: no us-east-1, WAF never deployed
+else
 WAF_STATUS=$(aws cloudformation describe-stacks --stack-name "$WAF_STACK" --region "us-east-1" \
   --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "NOT_FOUND")
+fi
 # count_oauth_consumers: how many LarkMcpOnAgentCoreOAuth* stacks still exist
 # (across all slugs). The shared WAF's cross-region export is read by each OAuth
 # stack, so the WAF must NOT be destroyed while any consumer remains.
@@ -1665,7 +1681,7 @@ for i in range(30):
 print('  Timeout', file=sys.stderr); sys.exit(1)
 "
 
-RUNTIME_ARN="arn:aws:bedrock-agentcore:${REGION}:${ACCOUNT_ID}:runtime/${RUNTIME_ID}"
+RUNTIME_ARN="arn:${AWS_PARTITION}:bedrock-agentcore:${REGION}:${ACCOUNT_ID}:runtime/${RUNTIME_ID}"
 
 # 配置 Middleware
 step step_4
@@ -1675,7 +1691,7 @@ MIDDLEWARE_FN=$(aws cloudformation describe-stacks --stack-name "$OAUTH_STACK" -
 if [ -n "$MIDDLEWARE_FN" ]; then
   aws lambda update-function-configuration \
     --function-name "$MIDDLEWARE_FN" \
-    --environment "Variables={RUNTIME_ARN=${RUNTIME_ARN},SECRET_PREFIX=${SECRET_USERS_PREFIX},STATE_SECRET_PARAM=${STATE_PARAM},AUTHORIZE_BASE=${OAUTH_ENDPOINT},DEPLOY_REGION=${REGION}}" \
+    --environment "Variables={RUNTIME_ARN=${RUNTIME_ARN},SECRET_PREFIX=${SECRET_USERS_PREFIX},STATE_SECRET_PARAM=${STATE_PARAM},AUTHORIZE_BASE=${OAUTH_ENDPOINT},DEPLOY_REGION=${REGION},URL_SUFFIX=${AWS_URL_SUFFIX}}" \
     --region $REGION >/dev/null 2>&1
   info "Middleware configured ✓"
 else

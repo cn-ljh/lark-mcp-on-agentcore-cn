@@ -496,7 +496,7 @@ exports[`CDK Snapshot Tests > OAuthStack matches snapshot 1`] = `
       "Properties": {
         "Code": {
           "S3Bucket": "cdk-hnb659fds-assets-123456789012-us-west-2",
-          "S3Key": "4f70e3a34ac3a6e45406cb45300717f43e807019d43df8cef2ac901bb4b20584.zip",
+          "S3Key": "5a23c1f1989ce836bef04d2a14750612dd8fe3d269fbae5ed7bf437cfe85deb7.zip",
         },
         "Environment": {
           "Variables": {
@@ -505,6 +505,7 @@ exports[`CDK Snapshot Tests > OAuthStack matches snapshot 1`] = `
             "RUNTIME_ARN": "arn:aws:bedrock-agentcore:us-west-2:123456789012:runtime/test-runtime",
             "SECRET_PREFIX": "lark-mcp-on-agentcore/users",
             "STATE_SECRET_PARAM": "/lark-mcp-on-agentcore/state-secret",
+            "URL_SUFFIX": "amazonaws.com",
           },
         },
         "FunctionName": "TestOAuthStack-middleware",
@@ -2108,7 +2109,7 @@ exports[`CDK Snapshot Tests > OAuthStack matches snapshot 1`] = `
       "Properties": {
         "Code": {
           "S3Bucket": "cdk-hnb659fds-assets-123456789012-us-west-2",
-          "S3Key": "a40ec199abb6b4a99998a4ba7d62095e0fdd99f91ee9fe18f730c6469b827121.zip",
+          "S3Key": "165154151b0b50da68e104bac41e5bfd8664e68fbb2d18f8428007ceeb5e9919.zip",
         },
         "Environment": {
           "Variables": {

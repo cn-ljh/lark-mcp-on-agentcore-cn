@@ -3,6 +3,7 @@ import * as ecr_assets from "aws-cdk-lib/aws-ecr-assets";
 import * as iam from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
 import * as path from "path";
+import { partitionOf } from "./partition";
 import { resolveSlug } from "./slug-names";
 
 export interface RuntimeStackProps extends cdk.StackProps {
@@ -18,6 +19,8 @@ export class RuntimeStack extends cdk.Stack {
     super(scope, id, props);
 
     cdk.Tags.of(this).add("project", "lark-mcp-on-agentcore");
+    // aws / aws-cn — keeps hard-coded ARNs valid in the China partition.
+    const partition = partitionOf(this);
 
     // Docker image (auto build + push)
     const image = new ecr_assets.DockerImageAsset(this, "LarkMcpImage", {
@@ -41,7 +44,7 @@ export class RuntimeStack extends cdk.Stack {
     const names = resolveSlug(props.slug ?? "");
     this.runtimeRole.addToPolicy(new iam.PolicyStatement({
       actions: ["secretsmanager:GetSecretValue"],
-      resources: [`arn:aws:secretsmanager:${this.region}:${this.account}:secret:${names.feishuSecret}-*`],
+      resources: [`arn:${partition}:secretsmanager:${this.region}:${this.account}:secret:${names.feishuSecret}-*`],
     }));
 
     // Outputs consumed by deploy.sh to wire AgentCore Runtime + Lambda env.

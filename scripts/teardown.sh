@@ -102,7 +102,8 @@ step "CDK stacks ($REGION)"
 ( cd "${PROJECT_DIR}/infra" && AWS_REGION="$REGION" npx cdk destroy "$OAUTH_STACK" "$RUNTIME_STACK" -c "slug=${SLUG}" --force ) || warn "Some CDK destroy steps failed"
 
 # 3. Shared WAF — destroy ONLY when no other app still consumes it.
-if [ "${SKIP_WAF:-0}" != "1" ]; then
+# aws-cn (cn-*) never has the us-east-1 CloudFront-scope WAF.
+if [ "${SKIP_WAF:-0}" != "1" ] && [[ "$REGION" != cn-* ]]; then
   OTHERS=$(count_other_oauth_consumers)
   if [ "$OTHERS" -gt 0 ]; then
     warn "Shared WAF (${WAF_STACK}) left in place — ${OTHERS} other app(s) still use it."

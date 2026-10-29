@@ -29,7 +29,10 @@ const larkBrand = process.env.LARKSUITE_CLI_BRAND === "lark" ? "lark" : "feishu"
 // Set SKIP_WAF=1 to omit the WAF stack (e.g., for region-locked tenants).
 // The WAF is SHARED across all apps and is NOT slug-suffixed; deploy.sh deploys
 // it only on first creation and excludes it from the per-slug deploy set.
-const skipWaf = process.env.SKIP_WAF === "1";
+// AWS China (cn-*): no us-east-1 / CloudFront-scope WAF in the aws-cn
+// partition, so the WAF stack is always skipped there.
+const isChinaRegion = region.startsWith("cn-");
+const skipWaf = process.env.SKIP_WAF === "1" || isChinaRegion;
 const waf = skipWaf ? undefined : new WafStack(app, names.wafStack, {
   env: { account, region: "us-east-1" },
   crossRegionReferences: true,
