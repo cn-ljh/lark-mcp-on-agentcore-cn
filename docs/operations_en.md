@@ -50,15 +50,14 @@ deploy.sh is an interactive deployment script handling the full flow from enviro
 - Creates/updates Feishu app credentials in Secrets Manager
 - Creates SSM SecureStrings: state-secret (signing root key) and oauth-client-secret
 - Installs dependencies (root + docker + infra)
-- `cdk deploy` deploys Runtime Stack + WAF Stack (optional) + OAuth Stack
+- `cdk deploy` deploys WAF Stack (optional) + OAuth Stack
 
 **Step 2/5: AgentCore Runtime**
-- Uses boto3 to create or update AgentCore Runtime (container image URI, IAM Role, environment variables)
-- Polls until Runtime status becomes READY (up to 5 minutes)
+- `cdk deploy` deploys the Runtime Stack: Docker image, IAM Role, `AWS::BedrockAgentCore::Runtime` (image URI, environment variables, idle timeout, request-header allowlist) and `AWS::BedrockAgentCore::RuntimeEndpoint` `ep`. CloudFormation waits until both are READY
+- First deploy after upgrading from a version that created the runtime via boto3: the legacy runtime is deleted first so CloudFormation can recreate it with the same name (MCP is briefly unavailable)
 
 **Step 3/5: Runtime Endpoint**
-- Creates or updates Runtime Endpoint
-- Polls until Endpoint is ready
+- Checks that endpoint `ep` is READY and its live version equals the runtime's current version
 
 **Step 4/5: Configure Middleware**
 - Updates Middleware Lambda environment variables (RUNTIME_ARN, AUTHORIZE_BASE, etc.)

@@ -62,8 +62,16 @@ if [ "${TEARDOWN_YES:-0}" != "1" ]; then
   fi
 fi
 
-# 1. AgentCore Runtime + Endpoint (not managed by CDK).
+# 1. AgentCore Runtime + Endpoint. Current deployments own them in the Runtime
+#    stack (cdk destroy below removes them). Only a legacy deployment, where
+#    deploy.sh created the runtime via boto3, needs the manual delete here.
 step "AgentCore Runtime (${RUNTIME_NAME})"
+CDK_RUNTIME_ARN=$(aws cloudformation describe-stacks --stack-name "$RUNTIME_STACK" --region "$REGION" \
+  --query 'Stacks[0].Outputs[?OutputKey==`RuntimeArn`].OutputValue' --output text 2>/dev/null || echo "")
+RUNTIME_ID=""
+if [ -n "$CDK_RUNTIME_ARN" ] && [ "$CDK_RUNTIME_ARN" != "None" ]; then
+  echo "  Managed by CloudFormation (${RUNTIME_STACK}); removed with the CDK stacks"
+else
 RUNTIME_ID=$(RUNTIME_NAME="$RUNTIME_NAME" REGION="$REGION" python3 -c "
 import boto3, os
 c = boto3.client('bedrock-agentcore-control', region_name=os.environ['REGION'])
@@ -95,6 +103,7 @@ except Exception as e: print(f'  runtime delete failed: {e}')
 "
 else
   echo "  No Runtime found (${RUNTIME_NAME}), skipping"
+fi
 fi
 
 # 2. CDK stacks (this app's OAuth + Runtime).

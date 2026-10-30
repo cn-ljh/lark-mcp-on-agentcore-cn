@@ -50,15 +50,14 @@ deploy.sh 是一个交互式部署脚本，完成从环境检查到端到端验�
 - 创建/更新 Secrets Manager 中的飞书 App 凭证
 - 创建 SSM SecureString：state-secret（签名根密钥）和 oauth-client-secret
 - 安装依赖（root + docker + infra）
-- `cdk deploy` 部署 Runtime Stack + WAF Stack (可选) + OAuth Stack
+- `cdk deploy` 部署 WAF Stack（可选）+ OAuth Stack
 
 **第 2/5 步：AgentCore Runtime**
-- 使用 boto3 创建或更新 AgentCore Runtime（含容器镜像 URI、IAM Role、环境变量）
-- 轮询等待 Runtime 状态变为 READY（最多 5 分钟）
+- `cdk deploy` 部署 Runtime Stack：Docker 镜像、IAM Role、`AWS::BedrockAgentCore::Runtime`（镜像 URI、环境变量、空闲超时、请求头白名单）和 `AWS::BedrockAgentCore::RuntimeEndpoint` `ep`，由 CloudFormation 等到两者都 READY
+- 从旧版本（用 boto3 创建 runtime）升级后的第一次部署：会先删掉旧 runtime，再由 CloudFormation 用同名重建，期间 MCP 短暂不可用
 
 **第 3/5 步：Runtime Endpoint**
-- 创建或更新 Runtime Endpoint
-- 轮询等待 Endpoint 就绪
+- 检查 endpoint `ep` 为 READY，且线上版本等于 runtime 当前版本
 
 **第 4/5 步：配置 Middleware**
 - 更新 Middleware Lambda 环境变量（RUNTIME_ARN、AUTHORIZE_BASE 等）

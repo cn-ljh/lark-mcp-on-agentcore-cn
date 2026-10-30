@@ -54,6 +54,10 @@ curl -s -o /dev/null -w '%{http_code}\n' $B/.well-known/oauth-protected-resource
 curl -s -D - -o /dev/null -X POST $B/mcp -H 'content-type: application/json' -d '{}' | grep -i 'www-authenticate'  # 401 with resource_metadata
 ```
 
+## Upgrade note
+
+The AgentCore Runtime and Endpoint are now CloudFormation resources (`AWS::BedrockAgentCore::Runtime` / `RuntimeEndpoint` in the Runtime stack); both types are available in Ningxia. The first deploy after upgrading from a version where deploy.sh created the runtime via boto3 deletes the legacy runtime and recreates it under the same name. The runtime ID changes and MCP is down for about 6 minutes; the MCP URL, callback URL, and user authorizations stay the same.
+
 ## Known limitations
 
 - The entry point is the native `execute-api` domain, with no ICP filing. Evaluate for yourself whether it is reachable long term from mainland networks and whether it meets compliance requirements. A custom domain needs an ICP-filed domain configured as an API Gateway custom domain.

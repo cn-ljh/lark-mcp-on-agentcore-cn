@@ -61,3 +61,46 @@ describe("aws partition unchanged", () => {
     expect(JSON.stringify(t.toJSON())).not.toContain("aws-cn");
   });
 });
+
+describe("AgentCore Runtime is a CloudFormation resource (cn-northwest-1)", () => {
+  const app = new cdk.App();
+  const stack = new RuntimeStack(app, "RuntimeCnCfn", {
+    env: CN_ENV,
+    appId: "cli_test",
+    authorizeBase: "https://abc.execute-api.cn-northwest-1.amazonaws.com.cn",
+    idleTimeoutSeconds: 900,
+  });
+  const t = Template.fromStack(stack);
+
+  it("creates exactly one Runtime with the expected config", () => {
+    t.resourceCountIs("AWS::BedrockAgentCore::Runtime", 1);
+    t.hasResourceProperties("AWS::BedrockAgentCore::Runtime", {
+      AgentRuntimeName: "lark_mcp_on_agentcore",
+      ProtocolConfiguration: "MCP",
+      NetworkConfiguration: { NetworkMode: "PUBLIC" },
+      LifecycleConfiguration: { IdleRuntimeSessionTimeout: 900 },
+      RequestHeaderConfiguration: {
+        RequestHeaderAllowlist: ["X-User-Access-Token", "X-Runtime-User-Id", "X-Incr-Auth-Token"],
+      },
+      EnvironmentVariables: {
+        APP_ID: "cli_test",
+        AWS_REGION: "cn-northwest-1",
+        AUTHORIZE_BASE: "https://abc.execute-api.cn-northwest-1.amazonaws.com.cn",
+        LARKSUITE_CLI_BRAND: "feishu",
+      },
+    });
+  });
+
+  it("creates the 'ep' endpoint pinned to the runtime's current version", () => {
+    t.resourceCountIs("AWS::BedrockAgentCore::RuntimeEndpoint", 1);
+    t.hasResourceProperties("AWS::BedrockAgentCore::RuntimeEndpoint", {
+      Name: "ep",
+      AgentRuntimeId: { "Fn::GetAtt": ["AgentRuntime", "AgentRuntimeId"] },
+      AgentRuntimeVersion: { "Fn::GetAtt": ["AgentRuntime", "AgentRuntimeVersion"] },
+    });
+  });
+
+  it("exports RuntimeArn for deploy.sh", () => {
+    t.hasOutput("RuntimeArn", { Value: { "Fn::GetAtt": ["AgentRuntime", "AgentRuntimeArn"] } });
+  });
+});

@@ -50,7 +50,17 @@ const oauth = new OAuthStack(app, names.oauthStack, {
 });
 if (waf) oauth.addDependency(waf);
 
-const runtime = new RuntimeStack(app, names.runtimeStack, { env, slug });
+// Runtime container config. deploy.sh deploys the OAuth stack first, then this
+// stack with APP_ID / OAUTH_ENDPOINT set (plain values, no cross-stack export).
+const idle = parseInt(process.env.AGENTCORE_IDLE_TIMEOUT || "600", 10);
+const runtime = new RuntimeStack(app, names.runtimeStack, {
+  env,
+  slug,
+  appId: process.env.APP_ID || "",
+  authorizeBase: process.env.OAUTH_ENDPOINT || "",
+  idleTimeoutSeconds: Number.isInteger(idle) && idle > 0 ? idle : 600,
+  larkBrand,
+});
 runtime.addDependency(oauth);
 
 // Optional read-only cross-app roll-up dashboard (hybrid observability). Opt-in

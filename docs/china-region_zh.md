@@ -54,6 +54,10 @@ curl -s -o /dev/null -w '%{http_code}\n' $B/.well-known/oauth-protected-resource
 curl -s -D - -o /dev/null -X POST $B/mcp -H 'content-type: application/json' -d '{}' | grep -i 'www-authenticate'  # 401，并带 resource_metadata
 ```
 
+## 升级说明
+
+AgentCore Runtime 和 Endpoint 现在由 CloudFormation 管理（Runtime Stack 里的 `AWS::BedrockAgentCore::Runtime` / `RuntimeEndpoint`），宁夏已有这两种资源类型。从旧版本（deploy.sh 用 boto3 创建 runtime）升级后的第一次部署，会先删掉旧 runtime，再用同名重建。runtime ID 会变，MCP 中断约 6 分钟；MCP 地址、回调地址和用户授权都不变。
+
 ## 已知限制
 
 - 入口是 `execute-api` 原生域名，没有 ICP 备案。境内网络能否长期稳定访问、是否合规需要自行评估。要用自定义域名，需要 ICP 备案域名，并在 API Gateway 上配置自定义域名。
