@@ -56,7 +56,13 @@ curl -s -D - -o /dev/null -X POST $B/mcp -H 'content-type: application/json' -d 
 
 ## Upgrade note
 
-The AgentCore Runtime and Endpoint are now CloudFormation resources (`AWS::BedrockAgentCore::Runtime` / `RuntimeEndpoint` in the Runtime stack); both types are available in Ningxia. The first deploy after upgrading from a version where deploy.sh created the runtime via boto3 deletes the legacy runtime and recreates it under the same name. The runtime ID changes and MCP is down for about 6 minutes; the MCP URL, callback URL, and user authorizations stay the same.
+The AgentCore Runtime is now a CloudFormation resource (`AWS::BedrockAgentCore::Runtime` in the Runtime stack), and traffic uses the service-managed `DEFAULT` endpoint. No custom endpoint is declared, because on a fresh deploy it can start creating before the runtime version is READY and fail with 409.
+
+- The first deploy after upgrading from a version where deploy.sh created the runtime via boto3 deletes the legacy runtime and recreates it under the same name. The runtime ID changes and MCP is down for about 6 minutes; the MCP URL, callback URL, and user authorizations stay the same.
+- The custom `ep` endpoint left by older versions is removed automatically.
+- The CloudWatch dashboard name carries the region (`lark-mcp-on-agentcore-<region>`). Dashboard names are unique per account, so without the suffix a second region in the same account failed with "already exists". On upgrade the old-named dashboard is replaced by the new one; metric data is not affected.
+
+Ningxia and Beijing can be deployed in the same account (tested).
 
 ## Known limitations
 

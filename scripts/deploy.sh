@@ -1217,8 +1217,10 @@ DEPLOY_STARTED=true
 # 清理残留资源
 info "${L[clean_residuals]}"
 # Dashboard physical name for THIS app (default app = bare name, slug = suffixed).
-# Mirrors slug-names.ts dashboardName so we can reap an orphaned dashboard below.
-DASHBOARD_NAME="lark-mcp-on-agentcore${SLUG:+-$SLUG}"
+# Mirrors oauth-stack.ts (slug-names dashboardName + "-<region>") so we can reap
+# an orphaned dashboard below. Dashboards are account-global, so the region
+# suffix is what keeps this from matching another region's live dashboard.
+DASHBOARD_NAME="lark-mcp-on-agentcore${SLUG:+-$SLUG}-${REGION}"
 for STACK_NAME in "$OAUTH_STACK" "$RUNTIME_STACK"; do
   STACK_STATUS=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --region "$REGION" \
     --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "NOT_FOUND")
@@ -1582,8 +1584,8 @@ print(f'  Migrated {migrated}/{$OPENID_COUNT} entries')
   info "OpenID mapping migration complete ✓"
 fi
 
-# AgentCore Runtime + Endpoint (CloudFormation: AWS::BedrockAgentCore::Runtime /
-# RuntimeEndpoint in the Runtime stack).
+# AgentCore Runtime (CloudFormation: AWS::BedrockAgentCore::Runtime in the
+# Runtime stack; traffic uses the service-managed DEFAULT endpoint).
 step step_2
 
 # One-time migration: deployments made before the Runtime moved into CDK have a
@@ -1651,16 +1653,33 @@ info "Image: ${IMAGE_URI}"
 info "Runtime: ${RUNTIME_ID} (v${RUNTIME_VERSION})"
 
 step step_3
-# CloudFormation already waited for the endpoint; confirm it serves the latest version.
+# Traffic uses the service-managed DEFAULT endpoint (always the latest version).
+# Wait until it is READY on the version CloudFormation just produced, and remove
+# the custom "ep" endpoint left by earlier versions of this script/stack.
 python3 -c "
-import boto3, sys
+import boto3, sys, time
 c = boto3.client('bedrock-agentcore-control', region_name='${REGION}')
-r = c.get_agent_runtime_endpoint(agentRuntimeId='${RUNTIME_ID}', endpointName='ep')
-live = str(r.get('liveVersion', '?'))
-if r['status'] == 'READY' and live == '${RUNTIME_VERSION}':
-    print(f'  Endpoint ready ✓ (live v{live})')
-else:
-    print(f'  Endpoint status={r[\"status\"]} live=v{live} expected=v${RUNTIME_VERSION}', file=sys.stderr); sys.exit(1)
+rid, want = '${RUNTIME_ID}', '${RUNTIME_VERSION}'
+try:
+    c.delete_agent_runtime_endpoint(agentRuntimeId=rid, endpointName='ep')
+    print('  Removed legacy endpoint ep')
+except c.exceptions.ResourceNotFoundException:
+    pass
+except Exception as e:
+    print(f'  Note: legacy endpoint ep not removed: {e}')
+# aws-cn endpoint provisioning can take several minutes, so wait up to 10 min.
+for i in range(120):
+    try:
+        r = c.get_agent_runtime_endpoint(agentRuntimeId=rid, endpointName='DEFAULT')
+        live = str(r.get('liveVersion', '?'))
+        if r['status'] == 'READY' and live == want:
+            print(f'  DEFAULT endpoint ready ✓ (live v{live})'); sys.exit(0)
+        if r['status'] in ('CREATE_FAILED', 'UPDATE_FAILED', 'FAILED'):
+            print(f'  DEFAULT endpoint {r[\"status\"]}: {r.get(\"failureReason\", \"?\")}', file=sys.stderr); sys.exit(1)
+    except c.exceptions.ResourceNotFoundException:
+        pass
+    time.sleep(5)
+print(f'  Timeout: DEFAULT endpoint not READY on v{want}', file=sys.stderr); sys.exit(1)
 " || { err "${L[runtime_failed]}"; exit 1; }
 
 # 配置 Middleware

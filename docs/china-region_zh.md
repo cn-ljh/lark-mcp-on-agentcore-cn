@@ -56,7 +56,13 @@ curl -s -D - -o /dev/null -X POST $B/mcp -H 'content-type: application/json' -d 
 
 ## 升级说明
 
-AgentCore Runtime 和 Endpoint 现在由 CloudFormation 管理（Runtime Stack 里的 `AWS::BedrockAgentCore::Runtime` / `RuntimeEndpoint`），宁夏已有这两种资源类型。从旧版本（deploy.sh 用 boto3 创建 runtime）升级后的第一次部署，会先删掉旧 runtime，再用同名重建。runtime ID 会变，MCP 中断约 6 分钟；MCP 地址、回调地址和用户授权都不变。
+AgentCore Runtime 现在由 CloudFormation 管理（Runtime Stack 里的 `AWS::BedrockAgentCore::Runtime`），流量走服务自动维护的 `DEFAULT` endpoint。不声明自定义 endpoint，因为全新部署时它可能在 runtime 版本就绪前就开始创建，然后报 409 失败。
+
+- 从旧版本（deploy.sh 用 boto3 创建 runtime）升级后的第一次部署，会先删掉旧 runtime，再用同名重建。runtime ID 会变，MCP 中断约 6 分钟；MCP 地址、回调地址和用户授权都不变
+- 旧版本留下的自定义 endpoint `ep` 会被自动删除
+- CloudWatch Dashboard 名字带 region 后缀（`lark-mcp-on-agentcore-<region>`）：Dashboard 在账号内全局唯一，不带后缀时，同一账号部署第二个 region 会报 already exists。升级后旧名字的 Dashboard 会被替换成新名字，指标数据不受影响
+
+同一账号可以同时部署宁夏和北京（已实测）。
 
 ## 已知限制
 

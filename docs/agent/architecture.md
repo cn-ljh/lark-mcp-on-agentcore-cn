@@ -67,9 +67,12 @@ On shutdown the server drains in-flight calls
 Infra is **not** all owned by CDK. The split:
 
 - **CDK** owns everything, including the AgentCore Runtime. `infra/lib/runtime-stack.ts`
-  defines the Docker image (`DockerImageAsset`), the IAM `RuntimeRole`, the
-  `AWS::BedrockAgentCore::Runtime` and the `AWS::BedrockAgentCore::RuntimeEndpoint`
-  named `ep` (pinned to the runtime's current version). The Runtime resource defines
+  defines the Docker image (`DockerImageAsset`), the IAM `RuntimeRole`, and the
+  `AWS::BedrockAgentCore::Runtime`. No custom endpoint is declared: the middleware
+  invokes the runtime ARN without a qualifier, i.e. the service-managed `DEFAULT`
+  endpoint, which always serves the latest version. (A `CfnRuntimeEndpoint` can
+  start creating before the runtime version is READY and fail with 409.) The
+  Runtime resource defines
   the container's `environmentVariables` (`APP_ID`, `AUTHORIZE_BASE`, `APP_SECRET_ID`,
   `AWS_REGION`, `LARKSUITE_CLI_BRAND` — read near the top of `docker/server.js`),
   `lifecycleConfiguration.idleRuntimeSessionTimeout`, and
@@ -87,8 +90,8 @@ Infra is **not** all owned by CDK. The split:
 
 **Implication:** to change the Runtime's env vars, idle timeout, or allowed request
 headers, edit `infra/lib/runtime-stack.ts` (or the values deploy.sh passes in) and
-re-run `scripts/deploy.sh`. Any change produces a new runtime version and the `ep`
-endpoint follows it. The middleware's `X-User-Access-Token` / `X-Incr-Auth-Token`
+re-run `scripts/deploy.sh`. Any change produces a new runtime version and the
+`DEFAULT` endpoint follows it. The middleware's `X-User-Access-Token` / `X-Incr-Auth-Token`
 headers only reach the container because of that allowlist.
 
 ## Tool dispatch & skills (the heart of server.js)

@@ -91,12 +91,20 @@ describe("AgentCore Runtime is a CloudFormation resource (cn-northwest-1)", () =
     });
   });
 
-  it("creates the 'ep' endpoint pinned to the runtime's current version", () => {
-    t.resourceCountIs("AWS::BedrockAgentCore::RuntimeEndpoint", 1);
-    t.hasResourceProperties("AWS::BedrockAgentCore::RuntimeEndpoint", {
-      Name: "ep",
-      AgentRuntimeId: { "Fn::GetAtt": ["AgentRuntime", "AgentRuntimeId"] },
-      AgentRuntimeVersion: { "Fn::GetAtt": ["AgentRuntime", "AgentRuntimeVersion"] },
+  it("declares no custom endpoint (traffic uses the service-managed DEFAULT endpoint)", () => {
+    // A CfnRuntimeEndpoint races the runtime version reaching READY and fails
+    // with 409 on a fresh deploy, so none is declared.
+    t.resourceCountIs("AWS::BedrockAgentCore::RuntimeEndpoint", 0);
+  });
+
+  it("OAuth dashboard name carries the region (dashboards are account-global)", () => {
+    const app2 = new cdk.App();
+    const oauth = new OAuthStack(app2, "OAuthCnDash", {
+      env: CN_ENV,
+      runtimeArn: "arn:aws-cn:bedrock-agentcore:cn-northwest-1:123456789012:runtime/test",
+    });
+    Template.fromStack(oauth).hasResourceProperties("AWS::CloudWatch::Dashboard", {
+      DashboardName: "lark-mcp-on-agentcore-cn-northwest-1",
     });
   });
 

@@ -726,8 +726,13 @@ export class OAuthStack extends cdk.Stack {
     const ns = metricNs;
     const m = (metricName: string, opts: Partial<cloudwatch.MetricProps> = {}) =>
       new cloudwatch.Metric({ namespace: ns, metricName, statistic: "Sum", period: cdk.Duration.minutes(5), label: opts.label || `${metricName}${opts.statistic && opts.statistic !== "Sum" ? ` (${opts.statistic})` : ""}`, ...opts });
+    // Dashboard names are unique per ACCOUNT (dashboards are global), unlike
+    // alarms/Lambdas/tables which are regional. Suffix the region so the same
+    // app can be deployed to several regions of one account without the second
+    // deploy failing with "Dashboard ... already exists".
+    const dashboardName = `${names.dashboardName}-${this.region}`;
     const dashboard = new cloudwatch.Dashboard(this, "ObservabilityDashboard", {
-      dashboardName: names.dashboardName,
+      dashboardName,
     });
 
     // Section: Alarm Overview (top of dashboard for at-a-glance status)
@@ -870,7 +875,7 @@ export class OAuthStack extends cdk.Stack {
 
 
     const consoleHost = partition === "aws-cn" ? "console.amazonaws.cn" : `${this.region}.console.aws.amazon.com`;
-    const dashboardUrl = `https://${consoleHost}/cloudwatch/home?region=${this.region}#dashboards/dashboard/lark-mcp-on-agentcore`;
+    const dashboardUrl = `https://${consoleHost}/cloudwatch/home?region=${this.region}#dashboards/dashboard/${dashboardName}`;
     new cdk.CfnOutput(this, "DashboardUrl", { value: dashboardUrl, description: "CloudWatch observability dashboard" });
     new cdk.CfnOutput(this, "AlarmTopicArn", { value: alarmTopic.topicArn });
     new cdk.CfnOutput(this, "OAuthFunctionName", { value: oauthFn.functionName });

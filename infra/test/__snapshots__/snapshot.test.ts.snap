@@ -10,7 +10,7 @@ exports[`CDK Snapshot Tests > OAuthStack matches snapshot 1`] = `
     },
     "DashboardUrl": {
       "Description": "CloudWatch observability dashboard",
-      "Value": "https://us-west-2.console.aws.amazon.com/cloudwatch/home?region=us-west-2#dashboards/dashboard/lark-mcp-on-agentcore",
+      "Value": "https://us-west-2.console.aws.amazon.com/cloudwatch/home?region=us-west-2#dashboards/dashboard/lark-mcp-on-agentcore-us-west-2",
     },
     "FeishuRedirectUrl": {
       "Description": "Add this to Feishu app redirect URLs",
@@ -2491,7 +2491,7 @@ exports[`CDK Snapshot Tests > OAuthStack matches snapshot 1`] = `
             ],
           ],
         },
-        "DashboardName": "lark-mcp-on-agentcore",
+        "DashboardName": "lark-mcp-on-agentcore-us-west-2",
         "Tags": [
           {
             "Key": "project",
@@ -2778,14 +2778,6 @@ exports[`CDK Snapshot Tests > RuntimeStack matches snapshot 1`] = `
         ],
       },
     },
-    "RuntimeEndpointArn": {
-      "Value": {
-        "Fn::GetAtt": [
-          "AgentRuntimeEndpoint",
-          "AgentRuntimeEndpointArn",
-        ],
-      },
-    },
     "RuntimeId": {
       "Value": {
         "Fn::GetAtt": [
@@ -2867,28 +2859,6 @@ exports[`CDK Snapshot Tests > RuntimeStack matches snapshot 1`] = `
         },
       },
       "Type": "AWS::BedrockAgentCore::Runtime",
-    },
-    "AgentRuntimeEndpoint": {
-      "Properties": {
-        "AgentRuntimeId": {
-          "Fn::GetAtt": [
-            "AgentRuntime",
-            "AgentRuntimeId",
-          ],
-        },
-        "AgentRuntimeVersion": {
-          "Fn::GetAtt": [
-            "AgentRuntime",
-            "AgentRuntimeVersion",
-          ],
-        },
-        "Name": "ep",
-        "Tags": {
-          "app": "default",
-          "project": "lark-mcp-on-agentcore",
-        },
-      },
-      "Type": "AWS::BedrockAgentCore::RuntimeEndpoint",
     },
     "RuntimeRoleDefaultPolicy31263C89": {
       "Properties": {

@@ -53,11 +53,11 @@ deploy.sh is an interactive deployment script handling the full flow from enviro
 - `cdk deploy` deploys WAF Stack (optional) + OAuth Stack
 
 **Step 2/5: AgentCore Runtime**
-- `cdk deploy` deploys the Runtime Stack: Docker image, IAM Role, `AWS::BedrockAgentCore::Runtime` (image URI, environment variables, idle timeout, request-header allowlist) and `AWS::BedrockAgentCore::RuntimeEndpoint` `ep`. CloudFormation waits until both are READY
+- `cdk deploy` deploys the Runtime Stack: Docker image, IAM Role, and `AWS::BedrockAgentCore::Runtime` (image URI, environment variables, idle timeout, request-header allowlist). CloudFormation waits until it is READY
 - First deploy after upgrading from a version that created the runtime via boto3: the legacy runtime is deleted first so CloudFormation can recreate it with the same name (MCP is briefly unavailable)
 
 **Step 3/5: Runtime Endpoint**
-- Checks that endpoint `ep` is READY and its live version equals the runtime's current version
+- Waits until the service-managed `DEFAULT` endpoint (the one traffic uses) is READY on the runtime's current version, and removes the custom `ep` endpoint left by older versions
 
 **Step 4/5: Configure Middleware**
 - Updates Middleware Lambda environment variables (RUNTIME_ARN, AUTHORIZE_BASE, etc.)
@@ -359,7 +359,7 @@ and each app's runtime repoints to the shared ECR tag (**build-once / repoint-N*
 ./scripts/upgrade.sh --canary          # upgrade ONLY the default app, then verify
 ./scripts/upgrade.sh --rest            # upgrade every named app in the registry
 ./scripts/upgrade.sh --all             # canary (default) then --rest
-./scripts/upgrade.sh --rollback <slug> # repin <slug>'s endpoint to its previous runtime version
+./scripts/upgrade.sh --rollback <slug> # prints how to roll back (redeploy the previous commit)
 ./scripts/upgrade.sh --list            # show registered apps
 ```
 
@@ -371,19 +371,17 @@ iterates the registry and **continues on failure** — one app's failed upgrade 
 logged and skipped, it does not halt the others, so a single bad app can't block the
 fleet. Re-run `--rest` after fixing it.
 
-**In-flight sessions.** An upgrade repoints the Runtime endpoint to a new version;
+**In-flight sessions.** An upgrade creates a new Runtime version, which the `DEFAULT` endpoint serves;
 existing MCP sessions keep running on their microVM until they idle out, and new
 sessions pick up the new version. No active session is killed mid-call. Each user has
 one stable session, so a user who keeps calling without a 10-minute pause stays on the
 old version until the session reaches its 8-hour maximum lifetime.
 
-**Rollback.** `--rollback <slug>` repins the endpoint to the previous runtime
-*version* (image only) and prompts for an explicit `yes`. If no previous version
-exists, it tells you to use the full-rebuild path instead.
-
-> Image-only `--rollback` is safe **only if OAuth scopes did not change** between
-> versions. If the upgrade touched scopes, instead `git checkout <prev>` and
-> `./scripts/deploy.sh --app <slug> --yes`.
+**Rollback.** The runtime is a CloudFormation resource and traffic uses the
+`DEFAULT` endpoint (always the latest version), so there is no endpoint-version
+rollback. Roll back by redeploying the previous commit:
+`git checkout <prev>` and `./scripts/deploy.sh --app <slug> --yes`.
+`--rollback <slug>` only prints this instruction.
 
 ### Tear down one app
 

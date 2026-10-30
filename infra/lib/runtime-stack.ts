@@ -22,8 +22,6 @@ export interface RuntimeStackProps extends cdk.StackProps {
   larkBrand?: string;
 }
 
-/** Endpoint name kept from the boto3-managed era so ops/upgrade scripts still find it. */
-export const RUNTIME_ENDPOINT_NAME = "ep";
 
 export class RuntimeStack extends cdk.Stack {
   public readonly runtimeRole: iam.Role;
@@ -62,9 +60,13 @@ export class RuntimeStack extends cdk.Stack {
       resources: [`arn:${partition}:secretsmanager:${this.region}:${this.account}:secret:${names.feishuSecret}-*`],
     }));
 
-    // AgentCore Runtime + Endpoint (managed by CloudFormation; previously
-    // created/updated by deploy.sh via boto3). A new image URI or config change
-    // produces a new runtime version, and the endpoint follows it.
+    // AgentCore Runtime (managed by CloudFormation; previously created/updated by
+    // deploy.sh via boto3). A new image URI or config change produces a new
+    // runtime version. Traffic goes to the service-managed DEFAULT endpoint,
+    // which always tracks the latest version — the middleware invokes the
+    // runtime ARN without a qualifier. No custom endpoint is declared: a
+    // CfnRuntimeEndpoint can start creating before the runtime version is READY
+    // and fail with 409 "Agent version 1 must be in READY status".
     const runtime = new agentcore.CfnRuntime(this, "AgentRuntime", {
       agentRuntimeName: names.runtimeName,
       description: "Lark MCP Server (lark-cli)",
@@ -89,13 +91,6 @@ export class RuntimeStack extends cdk.Stack {
     // service validates the runtime, or creation fails on image pull.
     runtime.node.addDependency(this.runtimeRole);
 
-    const endpoint = new agentcore.CfnRuntimeEndpoint(this, "AgentRuntimeEndpoint", {
-      agentRuntimeId: runtime.attrAgentRuntimeId,
-      agentRuntimeVersion: runtime.attrAgentRuntimeVersion,
-      name: RUNTIME_ENDPOINT_NAME,
-      tags: { project: "lark-mcp-on-agentcore", app: names.slug || "default" },
-    });
-
     this.runtimeArn = runtime.attrAgentRuntimeArn;
 
     // Outputs consumed by deploy.sh to wire the middleware Lambda env.
@@ -104,6 +99,5 @@ export class RuntimeStack extends cdk.Stack {
     new cdk.CfnOutput(this, "RuntimeArn", { value: runtime.attrAgentRuntimeArn });
     new cdk.CfnOutput(this, "RuntimeId", { value: runtime.attrAgentRuntimeId });
     new cdk.CfnOutput(this, "RuntimeVersion", { value: runtime.attrAgentRuntimeVersion });
-    new cdk.CfnOutput(this, "RuntimeEndpointArn", { value: endpoint.attrAgentRuntimeEndpointArn });
   }
 }
