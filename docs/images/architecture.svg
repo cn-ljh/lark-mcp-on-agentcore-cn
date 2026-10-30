@@ -60,7 +60,7 @@
   <rect x="160" y="112" width="530" height="66" rx="4" fill="#fff" stroke="#333" stroke-width="1.2"/>
   <text x="425" y="131" text-anchor="middle" font-size="12" font-weight="500">API Gateway · HTTP API（$default，无路径前缀）</text>
   <text x="425" y="148" text-anchor="middle" font-size="9" fill="#666">限流 50 rps / 突发 100 · POST /register 5 rps</text>
-  <text x="425" y="164" text-anchor="middle" font-size="9" fill="#999">中国区不建 CloudFront / WAF（无 ICP 备案域名）</text>
+  <text x="425" y="164" text-anchor="middle" font-size="9" fill="#999">中国区不建 CloudFront / WAF · 公网访问需 ICP 备案</text>
 
   <!-- API GW 出口分叉: 左路 L 形, 右路直线 -->
   <path d="M 510 180 L 510 215 L 280 215 L 280 240" stroke="#333" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>

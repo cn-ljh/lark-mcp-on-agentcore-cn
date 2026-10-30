@@ -319,10 +319,10 @@ export class OAuthStack extends cdk.Stack {
     const registerRate = parseInt(process.env.REGISTER_RATE_LIMIT || "5", 10);
     const registerBurst = parseInt(process.env.REGISTER_BURST_LIMIT || "10", 10);
 
-    // AWS China (aws-cn): CloudFront has no usable default *.cloudfront.cn
-    // domain — it needs an ICP-filed alternate domain + IAM-uploaded cert, which
-    // this sample does not manage. So in cn-* regions CloudFront is never
-    // created and the API is exposed directly. A REST API stage URL carries a
+    // AWS China (aws-cn): Amazon CloudFront in the China regions no longer
+    // accepts new customers and is being retired, so in cn-* regions CloudFront
+    // is never created and the API is exposed directly. (Public access to the
+    // API Gateway endpoint in China requires ICP filing, same as CloudFront did.) A REST API stage URL carries a
     // "/prod" path prefix, which breaks MCP/OAuth discovery: clients derive
     // /register and /.well-known/* from the origin root (RFC 8414 / RFC 9728),
     // get API Gateway's own 403 "Forbidden", and dynamic client registration

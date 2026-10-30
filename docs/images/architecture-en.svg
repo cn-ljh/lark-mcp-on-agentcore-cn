@@ -60,7 +60,7 @@
   <rect x="160" y="112" width="530" height="66" rx="4" fill="#fff" stroke="#333" stroke-width="1.2"/>
   <text x="425" y="131" text-anchor="middle" font-size="12" font-weight="500">API Gateway · HTTP API ($default, no path prefix)</text>
   <text x="425" y="148" text-anchor="middle" font-size="9" fill="#666">Throttling 50 rps / burst 100 · POST /register 5 rps</text>
-  <text x="425" y="164" text-anchor="middle" font-size="9" fill="#999">No CloudFront / WAF in China (needs an ICP-filed domain)</text>
+  <text x="425" y="164" text-anchor="middle" font-size="9" fill="#999">No CloudFront / WAF in China · public access needs ICP filing</text>
 
   <!-- API GW split: left L-shape, right straight line -->
   <path d="M 510 180 L 510 215 L 280 215 L 280 240" stroke="#333" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>

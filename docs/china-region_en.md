@@ -17,7 +17,7 @@ Verified: full-stack deploy in Ningxia; Kiro connected through OAuth dynamic cli
 
 ### Why China uses an HTTP API instead of a REST API
 
-- CloudFront in China cannot serve on the default `*.cloudfront.cn` domain. It needs an ICP-filed domain and a certificate, which this project does not manage, so API Gateway is exposed directly.
+- Amazon CloudFront in the China regions no longer accepts new customers and is being retired, so this project does not create CloudFront in China and exposes API Gateway directly.
 - A REST API stage URL has a `/prod` prefix. MCP clients follow RFC 8414 / RFC 9728 and build `/register` and `/.well-known/*` from the origin root. API Gateway answers those requests itself with 403, so dynamic client registration fails (Kiro shows `Dynamic client registration rejected`).
 - A REST API also renames the Lambda's `WWW-Authenticate` header to `x-amzn-Remapped-WWW-Authenticate`, so clients never see the 401 challenge.
 - An HTTP API `$default` stage is served at the origin root and returns response headers unchanged, which removes both problems. The integrations use payload format v1.0, so the Lambdas receive the same event shape as with the REST proxy integration and need no code changes.
@@ -66,7 +66,7 @@ Ningxia and Beijing can be deployed in the same account (tested).
 
 ## Known limitations
 
-- The entry point is the native `execute-api` domain, with no ICP filing. Evaluate for yourself whether it is reachable long term from mainland networks and whether it meets compliance requirements. A custom domain needs an ICP-filed domain configured as an API Gateway custom domain.
+- **ICP filing**: as with CloudFront, public access to API Gateway in the China regions requires ICP filing. Make sure the ICP filing is in place before you deploy. A custom domain must also be ICP-filed and then configured as an API Gateway custom domain.
 - There is no WAF, only API Gateway throttling.
 - Building the image inside mainland China can be slow or fail for npm, GitHub, and awscli downloads. Build outside the mainland if you can.
 - In China, AgentCore Memory and Gateway connectors are not available. This project only uses Runtime, so it is not affected.

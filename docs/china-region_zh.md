@@ -17,7 +17,7 @@
 
 ### 为什么中国区用 HTTP API，不用 REST API
 
-- 中国区 CloudFront 不能用默认的 `*.cloudfront.cn` 域名对外服务，必须配 ICP 备案域名和证书。本项目不管理这些，所以 API Gateway 直接对外。
+- 中国区 CloudFront 已不再接受新用户，并且即将下线，所以本项目在中国区不建 CloudFront，API Gateway 直接对外。
 - REST API 的 stage URL 带 `/prod` 前缀。MCP 客户端会按 RFC 8414 / RFC 9728 从域名根路径推导 `/register`、`/.well-known/*`，这些请求会被 API Gateway 自己返回 403，动态客户端注册失败（Kiro 报 `Dynamic client registration rejected`）。
 - REST API 还会把 Lambda 返回的 `WWW-Authenticate` 头改名为 `x-amzn-Remapped-WWW-Authenticate`，客户端拿不到 401 的认证提示。
 - HTTP API 的 `$default` stage 直接挂在根路径上，响应头也原样返回，这两个问题都没有了。集成用 payload v1.0，Lambda 收到的事件格式和 REST 代理集成一样，Lambda 代码不用改。
@@ -66,7 +66,7 @@ AgentCore Runtime 现在由 CloudFormation 管理（Runtime Stack 里的 `AWS::B
 
 ## 已知限制
 
-- 入口是 `execute-api` 原生域名，没有 ICP 备案。境内网络能否长期稳定访问、是否合规需要自行评估。要用自定义域名，需要 ICP 备案域名，并在 API Gateway 上配置自定义域名。
+- **ICP 备案**：和 CloudFront 一样，中国区 API Gateway 也要完成 ICP 备案才能从公网访问。部署前请确认 ICP 备案已经办好。要用自定义域名，域名也要完成 ICP 备案，再在 API Gateway 上配置自定义域名。
 - 不建 WAF，只有 API Gateway 限流。
 - 在境内构建镜像时，npm、GitHub、awscli 下载可能很慢或访问不了，建议在海外构建。
 - 中国区 AgentCore 的 Memory、Gateway connector 等功能不可用。本项目只用 Runtime，不受影响。

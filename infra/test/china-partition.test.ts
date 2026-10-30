@@ -5,8 +5,8 @@ import { OAuthStack } from "../lib/oauth-stack";
 import { RuntimeStack } from "../lib/runtime-stack";
 
 // AWS China (aws-cn) partition support: ARNs must be arn:aws-cn:..., endpoint
-// DNS suffix amazonaws.com.cn, and CloudFront is skipped (no usable default
-// *.cloudfront.cn domain without an ICP-filed alias + IAM cert).
+// DNS suffix amazonaws.com.cn, and CloudFront is skipped (CloudFront in the
+// China regions no longer accepts new customers and is being retired).
 const CN_ENV = { account: "123456789012", region: "cn-northwest-1" };
 
 function cnTemplates() {

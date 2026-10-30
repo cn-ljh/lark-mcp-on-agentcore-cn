@@ -76,7 +76,7 @@ Save and authorize in the browser when prompted. See [Connect clients](docs/conn
 
 ## Architecture
 
-Requests from a remote MCP client (Kiro / Claude Code / Codex, which self-register via DCR, or Amazon Quick with a shared Client Secret) → API Gateway HTTP API (`$default` stage, served at the origin root so `/register` and `/.well-known/*` resolve for MCP discovery) → Middleware Lambda (MCP token verification + SigV4 signing) → AgentCore Runtime (MCP service container handles Feishu API calls; invoked via the `DEFAULT` endpoint, one session per user). In AWS China there is no CloudFront or WAF: CloudFront needs an ICP-filed domain, so the `execute-api` URL is used directly, protected by API Gateway throttling. OAuth Lambda manages user authorization and auto-refreshes tokens every 30 minutes via EventBridge. All tokens encrypted in Secrets Manager (a dedicated KMS key only this service can decrypt).
+Requests from a remote MCP client (Kiro / Claude Code / Codex, which self-register via DCR, or Amazon Quick with a shared Client Secret) → API Gateway HTTP API (`$default` stage, served at the origin root so `/register` and `/.well-known/*` resolve for MCP discovery) → Middleware Lambda (MCP token verification + SigV4 signing) → AgentCore Runtime (MCP service container handles Feishu API calls; invoked via the `DEFAULT` endpoint, one session per user). In AWS China there is no CloudFront or WAF: CloudFront in China no longer accepts new customers and is being retired, so the `execute-api` URL is used directly, protected by API Gateway throttling. Public access to API Gateway in China requires ICP filing. OAuth Lambda manages user authorization and auto-refreshes tokens every 30 minutes via EventBridge. All tokens encrypted in Secrets Manager (a dedicated KMS key only this service can decrypt).
 
 <p align="center">
   <img src="docs/images/architecture-en.svg" alt="Architecture" width="720">
@@ -312,7 +312,7 @@ AWS_PROFILE=<中国区 profile> AWS_REGION=cn-northwest-1 bash scripts/deploy.sh
 
 ## 架构
 
-支持远程 MCP 的客户端（Kiro / Claude Code / Codex 走 DCR 自注册，Amazon Quick 用共享 Client Secret）发起请求 → API Gateway HTTP API（`$default` stage，直接挂在域名根路径上，MCP 客户端能按根路径找到 `/register` 和 `/.well-known/*`）→ Middleware Lambda（验证 MCP Token + SigV4 签名）→ AgentCore Runtime（MCP 服务容器处理飞书 API 调用；通过 `DEFAULT` endpoint 调用，每个用户一个会话）。中国区不使用 CloudFront 和 WAF：CloudFront 需要 ICP 备案域名，所以直接对外提供 `execute-api` 地址，靠 API Gateway 限流防护。OAuth Lambda 负责用户授权和 Token 自动刷新（每 30 分钟），EventBridge 定时触发。所有 Token 加密存储在 Secrets Manager 中（专用 KMS 密钥，仅本服务可解密）。
+支持远程 MCP 的客户端（Kiro / Claude Code / Codex 走 DCR 自注册，Amazon Quick 用共享 Client Secret）发起请求 → API Gateway HTTP API（`$default` stage，直接挂在域名根路径上，MCP 客户端能按根路径找到 `/register` 和 `/.well-known/*`）→ Middleware Lambda（验证 MCP Token + SigV4 签名）→ AgentCore Runtime（MCP 服务容器处理飞书 API 调用；通过 `DEFAULT` endpoint 调用，每个用户一个会话）。中国区不使用 CloudFront 和 WAF：中国区 CloudFront 已不再接受新用户并即将下线，所以直接对外提供 `execute-api` 地址，靠 API Gateway 限流防护。中国区 API Gateway 要完成 ICP 备案才能从公网访问。OAuth Lambda 负责用户授权和 Token 自动刷新（每 30 分钟），EventBridge 定时触发。所有 Token 加密存储在 Secrets Manager 中（专用 KMS 密钥，仅本服务可解密）。
 
 <p align="center">
   <img src="docs/images/architecture.svg" alt="Architecture" width="720">
