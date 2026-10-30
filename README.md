@@ -6,6 +6,8 @@
 
 [English](#english) | [中文](#中文)
 
+> **AWS China (aws-cn) edition** — this fork (`china-region` branch) deploys to Ningxia `cn-northwest-1` / Beijing `cn-north-1`. 本分支为 **AWS 中国区版本**，部署到宁夏 / 北京。See / 详见 [docs/china-region_en.md](docs/china-region_en.md) · [docs/china-region_zh.md](docs/china-region_zh.md)
+
 # English
 
 **A hosted remote MCP service built on top of [lark-cli](https://github.com/larksuite/cli) — so remote MCP clients (e.g. [Amazon Quick Desktop](https://aws.amazon.com/quick/desktop/), [Kiro](https://kiro.dev/), [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex](https://openai.com/index/introducing-codex/)) can call Feishu's 2500+ APIs via 450+ tools, and complete multi-step operations with the right parameters, order, and preconditions.**
@@ -42,15 +44,16 @@ Parameter formats, call order, and preconditions like "check free/busy before bo
 
 > **Deploy from an ARM64 machine** (Apple Silicon Mac, or an AWS Graviton instance such as t4g / c7g). **Amazon Linux 2023** or **Ubuntu 24.04 LTS** (arm64) recommended.
 >
-> **Broad AWS permissions required.** Deployment uses CDK to create and configure CloudFormation, IAM, Lambda, API Gateway, CloudFront, DynamoDB, Secrets Manager, SSM, ECR, CloudWatch, SNS, EventBridge, KMS, and WAF, and drives the AgentCore Runtime directly via boto3 — spanning a dozen-plus services and including role creation and policy grants. **Use `AdministratorAccess` for the deploying identity** (grant it temporarily; you can revoke it after deploy). Scoping down permission-by-permission is tedious and error-prone.
+> **Broad AWS permissions required.** Deployment uses CDK to create and configure CloudFormation, IAM, Lambda, API Gateway (HTTP API), DynamoDB, Secrets Manager, SSM, ECR, CloudWatch, SNS, EventBridge, KMS, and the AgentCore Runtime (CloudFront and WAF are not used in China) — spanning a dozen-plus services and including role creation and policy grants. **Use `AdministratorAccess` for the deploying identity** (grant it temporarily; you can revoke it after deploy). Scoping down permission-by-permission is tedious and error-prone.
 >
 > **Create the Feishu/Lark app first.** `deploy.sh` does not create the app — it only validates an existing App ID + App Secret. Before deploying, create a custom app in the Feishu ([open.feishu.cn/app](https://open.feishu.cn/app)) or Lark ([open.larksuite.com/app](https://open.larksuite.com/app)) Developer Console, copy its credentials, and enable the required scopes. Full walkthrough (including the redirect URL you configure after deploy): **[docs/app-setup_en.md](docs/app-setup_en.md)**.
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/aws-samples/sample-lark-mcp-on-agentcore/main/scripts/install.sh)
+git clone -b china-region https://github.com/cn-ljh/lark-mcp-on-agentcore-cn.git && cd lark-mcp-on-agentcore-cn
+AWS_PROFILE=<china-profile> AWS_REGION=cn-northwest-1 bash scripts/deploy.sh   # or cn-north-1
 ```
 
-Check deps → Feishu credentials → Region / WAF / Log retention / Alarm presets / Webhook → Confirm → Auto deploy
+Check deps → Feishu credentials → Region / Log retention / Idle timeout / Alarm presets / Webhook → Confirm → Auto deploy (re-deploy: add `--yes`; keep `AWS_REGION` set)
 
 > Re-deploys and upgrades pre-fill previous config; change only what you need.
 
@@ -63,7 +66,7 @@ After deploy, add this to any remote-MCP client:
   "mcpServers": {
     "feishu": {
       "type": "http",
-      "url": "https://<your-domain>/mcp"
+      "url": "https://<api-id>.execute-api.<region>.amazonaws.com.cn/mcp"
     }
   }
 }
@@ -73,7 +76,7 @@ Save and authorize in the browser when prompted. See [Connect clients](docs/conn
 
 ## Architecture
 
-Requests from a remote MCP client (Kiro / Claude Code / Codex, which self-register via DCR, or Amazon Quick with a shared Client Secret) → CloudFront → API Gateway → Middleware Lambda (MCP token verification + SigV4 signing) → AgentCore Runtime (MCP service container handles Feishu API calls). OAuth Lambda manages user authorization and auto-refreshes tokens every 30 minutes via EventBridge. All tokens encrypted in Secrets Manager (a dedicated KMS key only this service can decrypt).
+Requests from a remote MCP client (Kiro / Claude Code / Codex, which self-register via DCR, or Amazon Quick with a shared Client Secret) → API Gateway HTTP API (`$default` stage, served at the origin root so `/register` and `/.well-known/*` resolve for MCP discovery) → Middleware Lambda (MCP token verification + SigV4 signing) → AgentCore Runtime (MCP service container handles Feishu API calls; invoked via the `DEFAULT` endpoint, one session per user). In AWS China there is no CloudFront or WAF: CloudFront needs an ICP-filed domain, so the `execute-api` URL is used directly, protected by API Gateway throttling. OAuth Lambda manages user authorization and auto-refreshes tokens every 30 minutes via EventBridge. All tokens encrypted in Secrets Manager (a dedicated KMS key only this service can decrypt).
 
 <p align="center">
   <img src="docs/images/architecture-en.svg" alt="Architecture" width="720">
@@ -84,9 +87,9 @@ Requests from a remote MCP client (Kiro / Claude Code / Codex, which self-regist
 
 | Category | Component | Description |
 |---|---|---|
-| Compute | AgentCore Runtime | MCP service container, stateless, auto-scaling, scale-to-zero |
+| Compute | AgentCore Runtime | MCP service container (CloudFormation-managed), one microVM session per user, idle reclaim (default 600 s, min 60 s), scale-to-zero |
 | Compute | Lambda × 3 | OAuth flow + MCP proxy + alarm relay (the alarm-relay Lambda is created only when a webhook is configured) |
-| Edge | CloudFront | HTTPS entry; optional WAFv2 rate limiting |
+| Entry | API Gateway HTTP API | HTTPS entry at the origin root; throttling 50 rps / burst 100, `POST /register` 5 rps. No CloudFront / WAF in China |
 | Observability | CloudWatch | Dashboard (5 sections / 12 charts) + 11 Alarms → SNS → Feishu group |
 | State | SM + DDB + SSM | Encrypted tokens + Auth codes + Signing keys |
 
@@ -108,7 +111,7 @@ Requests from a remote MCP client (Kiro / Claude Code / Codex, which self-regist
 | **Pay-per-use** | AgentCore Runtime scales to zero when idle, billed by vCPU-seconds + memory-seconds |
 | **Incremental auth** | Only common scopes are requested up front; the first time a low-frequency tool is used, an incremental-auth link is generated — the user clicks it, approves the new scope on the Feishu authorization page, and Feishu accumulates the existing scopes |
 | **Low-ops** | Auto token refresh (30min), alarms auto-push to Feishu group, logs expire by policy |
-| **Secure** | PKCE + HMAC tokens + WAF + Secrets Manager encryption (dedicated KMS key) ([details](docs/security_en.md)) |
+| **Secure** | PKCE + HMAC tokens + API Gateway throttling + Secrets Manager encryption (dedicated KMS key) ([details](docs/security_en.md)) |
 | **Lightweight upgrade** | When lark-cli releases a new version, follow `docs/skills/bump-lark-cli.md` (extract scopes + adapt skills + deploy), end users need no action |
 
 </details>
@@ -212,7 +215,7 @@ This service is designed for **per-user identity isolation**. The following are 
 
 ## Security Design
 
-In addition to standard security measures (PKCE + HMAC + WAF + KMS encryption, see [Security docs](docs/security_en.md)), the `lark_exec_script` tool has additional defense-in-depth:
+In addition to standard security measures (PKCE + HMAC + API Gateway throttling + KMS encryption, see [Security docs](docs/security_en.md)), the `lark_exec_script` tool has additional defense-in-depth:
 
 - **Boot-time frozen allowlist.** At container startup, all `skills/*/scripts/*.py` files are scanned into an in-memory Set. Only scripts in this list can be executed at runtime — even if an attacker writes a malicious file to the scripts/ directory via another tool, `lark_exec_script` will refuse to run it.
 - **Read-only filesystem protection.** The Dockerfile sets scripts/ directories to permission 555 (read+execute only) at build time; the container process runs as a non-root user and cannot overwrite existing scripts.
@@ -277,15 +280,16 @@ attributions.
 
 > **需在 ARM64 机器上部署**（Apple Silicon Mac，或 AWS Graviton 实例如 t4g / c7g）。推荐 **Amazon Linux 2023** 或 **Ubuntu 24.04 LTS**（arm64）。
 >
-> **需要较大的 AWS 权限。** 部署过程用 CDK 创建并配置 CloudFormation、IAM、Lambda、API Gateway、CloudFront、DynamoDB、Secrets Manager、SSM、ECR、CloudWatch、SNS、EventBridge、KMS、WAF 等资源，并通过 boto3 直接操作 AgentCore Runtime——横跨十几个服务且含建角色、发权限。**建议部署身份直接用 `AdministratorAccess`**（临时授予即可，部署完可回收），逐项收窄权限既繁琐又容易漏。
+> **需要较大的 AWS 权限。** 部署过程用 CDK 创建并配置 CloudFormation、IAM、Lambda、API Gateway（HTTP API）、DynamoDB、Secrets Manager、SSM、ECR、CloudWatch、SNS、EventBridge、KMS 以及 AgentCore Runtime 等资源（中国区不使用 CloudFront 和 WAF）——横跨十几个服务且含建角色、发权限。**建议部署身份直接用 `AdministratorAccess`**（临时授予即可，部署完可回收），逐项收窄权限既繁琐又容易漏。
 >
 > **先创建飞书 / Lark 应用。** `deploy.sh` 不会替你建应用，只校验已有的 App ID + App Secret。部署前请先在开放平台（飞书 [open.feishu.cn/app](https://open.feishu.cn/app) 或 Lark [open.larksuite.com/app](https://open.larksuite.com/app)）创建企业自建应用、拿到凭证并开通所需权限。完整步骤（含部署后要配的重定向 URL）见 **[docs/app-setup_zh.md](docs/app-setup_zh.md)**。
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/aws-samples/sample-lark-mcp-on-agentcore/main/scripts/install.sh)
+git clone -b china-region https://github.com/cn-ljh/lark-mcp-on-agentcore-cn.git && cd lark-mcp-on-agentcore-cn
+AWS_PROFILE=<中国区 profile> AWS_REGION=cn-northwest-1 bash scripts/deploy.sh   # 北京改 cn-north-1
 ```
 
-检查依赖 → 飞书凭证 → 区域 / WAF / 日志保留 / 告警预设 / Webhook → 确认 → 自动部署
+检查依赖 → 飞书凭证 → 区域 / 日志保留 / 空闲回收 / 告警预设 / Webhook → 确认 → 自动部署（再次部署加 `--yes`，同时保留 `AWS_REGION`）
 
 > 重复部署或升级版本时自动填入上次配置，按需修改。
 
@@ -298,7 +302,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/aws-samples/sample-lark-mcp-
   "mcpServers": {
     "feishu": {
       "type": "http",
-      "url": "https://<your-domain>/mcp"
+      "url": "https://<api-id>.execute-api.<region>.amazonaws.com.cn/mcp"
     }
   }
 }
@@ -308,7 +312,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/aws-samples/sample-lark-mcp-
 
 ## 架构
 
-支持远程 MCP 的客户端（Kiro / Claude Code / Codex 走 DCR 自注册，Amazon Quick 用共享 Client Secret）发起请求 → CloudFront → API Gateway → Middleware Lambda（验证 MCP Token + SigV4 签名）→ AgentCore Runtime（MCP 服务容器处理飞书 API 调用）。OAuth Lambda 负责用户授权和 Token 自动刷新（每 30 分钟），EventBridge 定时触发。所有 Token 加密存储在 Secrets Manager 中（专用 KMS 密钥，仅本服务可解密）。
+支持远程 MCP 的客户端（Kiro / Claude Code / Codex 走 DCR 自注册，Amazon Quick 用共享 Client Secret）发起请求 → API Gateway HTTP API（`$default` stage，直接挂在域名根路径上，MCP 客户端能按根路径找到 `/register` 和 `/.well-known/*`）→ Middleware Lambda（验证 MCP Token + SigV4 签名）→ AgentCore Runtime（MCP 服务容器处理飞书 API 调用；通过 `DEFAULT` endpoint 调用，每个用户一个会话）。中国区不使用 CloudFront 和 WAF：CloudFront 需要 ICP 备案域名，所以直接对外提供 `execute-api` 地址，靠 API Gateway 限流防护。OAuth Lambda 负责用户授权和 Token 自动刷新（每 30 分钟），EventBridge 定时触发。所有 Token 加密存储在 Secrets Manager 中（专用 KMS 密钥，仅本服务可解密）。
 
 <p align="center">
   <img src="docs/images/architecture.svg" alt="Architecture" width="720">
@@ -319,9 +323,9 @@ bash <(curl -fsSL https://raw.githubusercontent.com/aws-samples/sample-lark-mcp-
 
 | 类别 | 组件 | 说明 |
 |---|---|---|
-| 计算 | AgentCore Runtime | MCP 服务容器，无状态，自动弹性，空闲缩零 |
+| 计算 | AgentCore Runtime | MCP 服务容器（CloudFormation 管理），每个用户一个 microVM 会话，空闲回收（默认 600 秒，最低 60 秒），空闲缩零 |
 | 计算 | Lambda × 3 | OAuth 流程 + MCP 代理 + 告警转发（告警转发 Lambda 仅在配置 webhook 时创建） |
-| 边缘 | CloudFront | HTTPS 入口；可选 WAFv2 速率限制 |
+| 入口 | API Gateway HTTP API | HTTPS 入口，挂在根路径上；限流 50 rps / 突发 100，`POST /register` 5 rps。中国区不建 CloudFront / WAF |
 | 可观测 | CloudWatch | Dashboard（5 板块 / 12 图表）+ 11 Alarms → SNS → 飞书群 |
 | 状态 | SM + DDB + SSM | Token 加密存储 + Auth Code + 签名密钥 |
 
@@ -343,7 +347,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/aws-samples/sample-lark-mcp-
 | **按需付费** | AgentCore Runtime 空闲缩零，按 vCPU-秒 + 内存-秒计费 |
 | **渐进授权** | 默认只申请常用权限；首次用到某个低频功能时，自动生成 incremental-auth 链接，用户点击在飞书授权页确认即可，已有权限会累积 |
 | **低运维** | Token 自动刷新（30min）、异常自动告警到飞书群、日志按策略过期 |
-| **安全** | PKCE + HMAC token + WAF + Secrets Manager 加密存储（专用 KMS 密钥）（[详情](docs/security_zh.md)） |
+| **安全** | PKCE + HMAC token + API Gateway 限流 + Secrets Manager 加密存储（专用 KMS 密钥）（[详情](docs/security_zh.md)） |
 | **轻量升级** | lark-cli 新版本发布时，按 `docs/skills/bump-lark-cli.md` 流程操作（提取 scope + 适配 skill + deploy），终端用户无需任何操作 |
 
 </details>
@@ -445,7 +449,7 @@ lark-cli 官方 20+ 个业务域 Skill 沉淀了多步操作的最佳实践—�
 
 ## 安全设计
 
-本服务在标准安全设计（PKCE + HMAC + WAF + KMS 加密，详见 [安全文档](docs/security_zh.md)）之上，对 `lark_exec_script` 工具实施了额外的纵深防御：
+本服务在标准安全设计（PKCE + HMAC + API Gateway 限流 + KMS 加密，详见 [安全文档](docs/security_zh.md)）之上，对 `lark_exec_script` 工具实施了额外的纵深防御：
 
 - **启动时冻结白名单。** 容器启动时扫描 `skills/*/scripts/*.py` 生成允许执行的脚本列表（内存 Set），运行时只允许执行该列表中的文件。即使攻击者通过其他工具将恶意文件写入 scripts/ 目录，也无法通过 `lark_exec_script` 执行。
 - **文件系统只读保护。** Dockerfile 构建时将 scripts/ 目录权限设为 555（只读+可执行），容器进程以非 root 用户运行，无法覆盖已有脚本。

@@ -6,6 +6,7 @@
   </defs>
   <rect width="1000" height="580" fill="#fff"/>
 
+  <text x="20" y="22" fill="#c45" font-size="11" font-weight="500">AWS 中国区 (aws-cn) · 宁夏 cn-northwest-1 / 北京 cn-north-1</text>
   <text x="980" y="22" text-anchor="end" fill="#aaa" font-size="10">tag: project=lark-mcp-on-agentcore</text>
 
   <!-- Layer labels (vertically aligned with each layer's content) -->
@@ -56,13 +57,10 @@
   <!-- ===== Layer 2: Edge ===== -->
   <rect x="80" y="100" width="700" height="88" rx="8" fill="#f8f9fa" stroke="#bbb" stroke-width="1"/>
 
-  <rect x="160" y="132" width="240" height="48" rx="4" fill="#fff" stroke="#333" stroke-width="1.2"/>
-  <text x="280" y="152" text-anchor="middle" font-size="11" font-weight="500">CloudFront</text>
-  <text x="280" y="170" text-anchor="middle" font-size="9" fill="#999" font-weight="400">+ WAFv2 (可选)</text>
-  <line x1="400" y1="158" x2="448" y2="158" stroke="#666" stroke-width="1.2" marker-end="url(#arr)"/>
-
-  <rect x="450" y="132" width="240" height="48" rx="4" fill="#fff" stroke="#333" stroke-width="1.2"/>
-  <text x="570" y="161" text-anchor="middle" font-size="11" font-weight="500">API Gateway</text>
+  <rect x="160" y="112" width="530" height="66" rx="4" fill="#fff" stroke="#333" stroke-width="1.2"/>
+  <text x="425" y="131" text-anchor="middle" font-size="12" font-weight="500">API Gateway · HTTP API（$default，无路径前缀）</text>
+  <text x="425" y="148" text-anchor="middle" font-size="9" fill="#666">限流 50 rps / 突发 100 · POST /register 5 rps</text>
+  <text x="425" y="164" text-anchor="middle" font-size="9" fill="#999">中国区不建 CloudFront / WAF（无 ICP 备案域名）</text>
 
   <!-- API GW 出口分叉: 左路 L 形, 右路直线 -->
   <path d="M 510 180 L 510 215 L 280 215 L 280 240" stroke="#333" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
@@ -88,14 +86,16 @@
 
   <!-- Middleware → AgentCore Runtime -->
   <line x1="640" y1="300" x2="640" y2="380" stroke="#333" stroke-width="1.5" marker-end="url(#arr)"/>
-  <text x="648" y="346" fill="#666" font-size="10">SigV4 invoke</text>
+  <text x="648" y="346" fill="#666" font-size="10">SigV4 invoke (.com.cn)</text>
 
   <!-- ===== Layer 4: AgentCore Runtime ===== -->
   <rect x="200" y="380" width="540" height="80" rx="6" fill="#f8f9fa" stroke="#333" stroke-width="1.2"/>
-  <text x="212" y="398" fill="#666" font-size="10">AgentCore Runtime</text>
+  <text x="212" y="398" fill="#666" font-size="10">AgentCore Runtime（CloudFormation 管理 · DEFAULT endpoint）</text>
   <rect x="212" y="406" width="516" height="46" rx="4" fill="#fff" stroke="#555" stroke-width="1"/>
   <text x="470" y="424" text-anchor="middle" font-size="13" font-weight="500">server.js + lark-cli</text>
   <text x="470" y="442" text-anchor="middle" font-size="10" fill="#666">28 Tier1 + lark_discover + lark_invoke (ARM64 Docker)</text>
+
+  <text x="460" y="476" text-anchor="end" fill="#666" font-size="9">每用户一个会话 · 空闲回收（默认 600s，最低 60s）</text>
 
   <!-- Runtime → Feishu OpenAPI -->
   <line x1="470" y1="460" x2="470" y2="510" stroke="#333" stroke-width="1.5" marker-end="url(#arr)"/>
