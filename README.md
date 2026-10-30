@@ -186,6 +186,7 @@ Spanning 22 business domains: Calendar, IM, Bitable, Mail, Docs, VC, Task, Wiki,
 | Releasing (version scheme) | [docs/releasing_en.md](docs/releasing_en.md) |
 | FAQ | [docs/faq_en.md](docs/faq_en.md) |
 | Cost | [docs/cost_en.md](docs/cost_en.md) |
+| AWS China (aws-cn) deployment | [docs/china-region_en.md](docs/china-region_en.md) |
 | Project Structure | [docs/structure_en.md](docs/structure_en.md) |
 
 ## Quick Commands
